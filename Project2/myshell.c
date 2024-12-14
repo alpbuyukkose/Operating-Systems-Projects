@@ -139,15 +139,22 @@ int handle_internal_commands(char **args) {
                     }
 
                     free(history_line);
-
            
                     if (history_count < HISTORY_SIZE) {
-                        strcpy(history[history_count++], history[index]);
-                    } else {
-                        for (int i = 1; i < HISTORY_SIZE; i++) {
-                            strcpy(history[i - 1], history[i]);
+                        // Diziyi aşağı kaydır
+                        for (int i = history_count; i > 0; i--) {
+                            strcpy(history[i], history[i - 1]);
                         }
-                        strcpy(history[HISTORY_SIZE - 1], history[index]);
+                        // Çalıştırılan komutu başa ekle
+                        strcpy(history[0], history[index]);
+                        history_count++;
+                    } else {
+                        // Diziyi aşağı kaydır
+                        for (int i = HISTORY_SIZE - 1; i > 0; i--) {
+                            strcpy(history[i], history[i - 1]);
+                        }
+                        // Çalıştırılan komutu başa ekle
+                        strcpy(history[0], history[index]);
                     }
 
                     return 1;
@@ -395,13 +402,19 @@ int main() {
             break;
         }
 
-        if (history_count < HISTORY_SIZE) {
-            strcpy(history[history_count++], line);
-        } else {
-            for (int i = 1; i < HISTORY_SIZE; i++) {
-                strcpy(history[i - 1], history[i]);
+        if (strncmp(line, "history", 7) != 0) { // Eğer ilk kelime "history" değilse kaydet
+            if (history_count < HISTORY_SIZE) {
+                for (int i = history_count; i > 0; i--) {
+                    strcpy(history[i], history[i - 1]);
+                }
+                strcpy(history[0], line);
+                history_count++;
+            } else {
+                for (int i = HISTORY_SIZE - 1; i > 0; i--) {
+                    strcpy(history[i], history[i - 1]);
+                }
+                strcpy(history[0], line);
             }
-            strcpy(history[HISTORY_SIZE - 1], line);
         }
 
         parse_command(line, args, pipe_args, &input_file, &output_file, &error_file, &append_output, &background);
