@@ -197,15 +197,6 @@ int handle_internal_commands(char **args) {
                 printf("Foreground process (PID %d) exited normally.\n", fg_pid);
             }
 
-            if (WIFEXITED(status) || WIFSIGNALED(status)) {
-                // Process listeden tamamen sil
-                for (int i = job_num; i < bg_count - 1; i++) {
-                    bg_processes[i] = bg_processes[i + 1];
-                }
-                bg_count--;
-                printf("Process finished and removed in background list: PID %d\n", fg_pid);
-            }
-
             running_foreground_pid = -1;  // Foreground pid'yi sıfırla
         } else {
             fprintf(stderr, "Invalid job number\n");
@@ -383,12 +374,16 @@ void execute_pipe_command(char **args1, char **args2) {
 
 void sigtstp_handler(int sig) {
     if (running_foreground_pid > 0) {
-        kill(running_foreground_pid, SIGKILL);
-        printf("\nForeground process with PID %d terminated.\n", running_foreground_pid);
+        kill(running_foreground_pid, SIGSTOP);
+        printf("\nForeground process with PID %d stopped.\n", running_foreground_pid);
+
+        bg_processes[bg_count].pid = running_foreground_pid;
+        snprintf(bg_processes[bg_count].command, MAX_LINE, "Suspended process");
+        bg_count++;
 
         running_foreground_pid = -1;
     } else {
-        printf("\nNo foreground process to stop.\n");
+        printf("\nNo foreground process to stop.");
     }
 }
 
