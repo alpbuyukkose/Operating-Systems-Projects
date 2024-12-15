@@ -21,6 +21,7 @@ void execute_command(char **args, int background);
 int handle_internal_commands(char **args);
 char *find_executable(char *command);
 void execute_pipe_command(char **args1, char **args2); 
+int already_in_list(pid_t pid);
 
 pid_t running_foreground_pid = -1;
 
@@ -182,19 +183,36 @@ int handle_internal_commands(char **args) {
             // Foreground'a al
             running_foreground_pid = fg_pid;
             kill(fg_pid, SIGCONT);  // Foreground işlemi başlat
-
             printf("Foreground process started: PID %d\n", fg_pid);
 
             // Foreground işlemi bitene kadar bekle
             int status;
             waitpid(fg_pid, &status, WUNTRACED);  // İşlem duraklatılabilir
 
-            // Duraklatma sonrası, shell prompt'u yeniden görünmeli
+            // Eğer işlem duraklatıldıysa (CTRL+Z ile)
             if (WIFSTOPPED(status)) {
-                // İşlem duraklatıldıysa, foreground'a alındığında shell çalışmaya devam etmeli
                 printf("Foreground process (PID %d) stopped. Returning to prompt...\n", fg_pid);
-            } else if (WIFEXITED(status)) {
+
+                // Eğer işlem zaten listede değilse, tekrar listeye ekle
+                if (!already_in_list(fg_pid)) {
+                    if (bg_count < MAX_ARGS) {
+                        bg_processes[bg_count].pid = fg_pid;
+                        snprintf(bg_processes[bg_count].command, MAX_LINE, "Suspended process");
+                        bg_count++;
+                    } else {
+                        fprintf(stderr, "Background process list is full, cannot add PID %d.\n", fg_pid);
+                    }
+                }
+            } 
+            // Eğer işlem tamamlandıysa (normal çıkış veya sinyal ile)
+            else if (WIFEXITED(status) || WIFSIGNALED(status)) {
                 printf("Foreground process (PID %d) exited normally.\n", fg_pid);
+
+                // Process listeden tamamen sil
+                for (int i = job_num; i < bg_count - 1; i++) {
+                    bg_processes[i] = bg_processes[i + 1];
+                }
+                bg_count--;
             }
 
             running_foreground_pid = -1;  // Foreground pid'yi sıfırla
@@ -368,18 +386,29 @@ void execute_pipe_command(char **args1, char **args2) {
     waitpid(pid2, NULL, 0); // Wait for the second process to complete
 }
 
-
-
-
+int already_in_list(pid_t pid) {
+    for (int i = 0; i < bg_count; i++) {
+        if (bg_processes[i].pid == pid) {
+            return 1; // Process zaten listede
+        }
+    }
+    return 0; // Process listede değil
+}
 
 void sigtstp_handler(int sig) {
     if (running_foreground_pid > 0) {
+        // Process durdur (her durumda durdurulmalı)
         kill(running_foreground_pid, SIGSTOP);
         printf("\nForeground process with PID %d stopped.\n", running_foreground_pid);
 
-        bg_processes[bg_count].pid = running_foreground_pid;
-        snprintf(bg_processes[bg_count].command, MAX_LINE, "Suspended process");
-        bg_count++;
+        // Eğer process listede değilse, ekle
+        if (!already_in_list(running_foreground_pid)) {
+            bg_processes[bg_count].pid = running_foreground_pid;
+            snprintf(bg_processes[bg_count].command, MAX_LINE, "Suspended process");
+            bg_count++;
+        } else {
+            printf("\nProcess with PID %d is already in the background list.\n", running_foreground_pid);
+        }
 
         running_foreground_pid = -1;
     } else {
